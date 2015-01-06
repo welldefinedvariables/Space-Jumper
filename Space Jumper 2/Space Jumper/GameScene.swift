@@ -7,32 +7,65 @@
 //
 
 import SpriteKit
+import AVFoundation
+
+var backgroundMusicPlayer: AVAudioPlayer!
+
+func playBackgroundMusic(filename: String) {
+    let url = NSBundle.mainBundle().URLForResource(
+        filename, withExtension: nil)
+    if (url == nil) {
+        println("Could not find file: \(filename)")
+        return
+    }
+    
+    var error: NSError? = nil
+    backgroundMusicPlayer =
+        AVAudioPlayer(contentsOfURL: url, error: &error)
+    if backgroundMusicPlayer == nil {
+        println("Could not create audio player: \(error!)")
+        return
+    }
+    
+    backgroundMusicPlayer.numberOfLoops = -1
+    backgroundMusicPlayer.prepareToPlay()
+    backgroundMusicPlayer.play()
+}
 
 class GameScene: SKScene, SKPhysicsContactDelegate {
     weak var gameViewController:GameViewController!
     
     // numbers
-    let BACK1_SCROLLING_SPEED: CGFloat = 0.5
-    let BACK2_SCROLLING_SPEED: CGFloat = 1.5
-    let BACK3_SCROLLING_SPEED: CGFloat = 2.5
+    let BACK1_SCROLLING_SPEED: CGFloat = 2.5
+    let GROUND_SCROLLING_SPEED: CGFloat = 5.0
+    var scaling = CGFloat(1.0)
     
     // counters
     var count = 0
     var limit = 60
     var powerUpTimer = 0
-    
+    var lastSpawn = 100
+    var boltTime = 0
+
     // booleans
     var poweredUp = false
     var jumperDeath = false
     var inGame = false
     var gameStarted = false
-    
+
     // background
     var back1: SKScrollingNode?
     var back2: SKScrollingNode?
     var jumpOffPad: SKSpriteNode!
-    var ground: SKSpriteNode!
-    var ground2: SKSpriteNode!
+    var ground: SKScrollingNode?
+    var ground2: SKScrollingNode?
+    
+    //Mini Hack
+    //TODO: Use Array
+    var star: SKSpriteNode!
+    var red: SKSpriteNode!
+    var blue: SKSpriteNode!
+    var bolt: SKSpriteNode!
     
     // score
     var scoreLabel: SKLabelNode = SKLabelNode(fontNamed: "Helvetica-Bold");
@@ -57,7 +90,10 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     
     // delegates
     var sceneDelegate: SceneDelegate?
- 
+    
+    // music 
+    var place = String()
+    
     required override init(size: CGSize) {
         super.init(size: size)
         self.physicsWorld.contactDelegate = self
@@ -85,7 +121,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     }
     
     func initSetup(){
-        println("initial setup")
+        //println("initial setup")
         //Physics
         self.physicsWorld.gravity = CGVectorMake(CGFloat(0.0), CGFloat(-5.0))
 
@@ -107,12 +143,15 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     }
     
     func setupBackground(){
-        back1 = SKScrollingNode.scrollingNode("Space.jpg", containerWidth:self.frame.size.width, containerHeight:self.frame.size.height);
+        back1 = SKScrollingNode.scrollingNode("background.png", containerWidth:self.frame.size.width, containerHeight:self.frame.size.height);
         //self.setScale(2.0);
         back1!.scrollingSpeed = BACK1_SCROLLING_SPEED;
         back1!.anchorPoint = CGPointZero;
-        back1!.setScale(0.3)
+        back1!.setScale(1.0)
         self.addChild(self.back1!);
+        
+        // music
+        playBackgroundMusic("F-777DoubleJump.mp3")
         
         //add background 2 and 3 later
     }
@@ -127,11 +166,11 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     }
     
     func setupJumper(){
-        println("setup jumper")
+        //println("setup jumper")
         jumper = JumperNode.instance();
         jumper!.position = CGPointMake(100, CGRectGetMidY(self.frame)/1.25);
         jumper!.name = "jumper";
-        jumper.setScale(0.3);
+        jumper.setScale(0.275);
         self.addChild(jumper!);
     }
     
@@ -157,28 +196,34 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         // Lower Ground
         var groundTextureLower = SKTexture(imageNamed: "groundRock2")
         var groundTextureUpper = SKTexture(imageNamed: "groundRock")
-        ground = SKSpriteNode(texture: groundTextureLower)
-        ground.name = "ground"
-        ground.setScale(0.85)
-        self.addChild(ground)
-        ground.position = CGPointMake(CGRectGetMidX(self.frame), 0 - ground.size.height/6)
-        ground.physicsBody = SKPhysicsBody(rectangleOfSize: ground.size)
-        ground.physicsBody?.categoryBitMask = Constants.GROUND_BIT_MASK
-        ground.physicsBody?.contactTestBitMask = Constants.JUMPER_BIT_MASK
-        ground.physicsBody?.collisionBitMask = Constants.JUMPER_BIT_MASK
-        ground.physicsBody?.dynamic = false
+        
+        ground = SKScrollingNode.scrollingNode("groundRock2.png", containerWidth: self.frame.size.width, containerHeight:self.frame.size.height) as SKScrollingNode;
+        ground!.anchorPoint = CGPointZero;
+        ground!.name = "ground"
+        ground!.scrollingSpeed = GROUND_SCROLLING_SPEED;
+        ground!.anchorPoint = CGPointZero;
+        ground!.setScale(0.8)
+        self.addChild(self.ground!)
+        
+        ground!.position = CGPointMake(0, -35)
+        ground!.physicsBody = SKPhysicsBody(rectangleOfSize: CGSize(width: 2000, height: 115))
+        ground!.physicsBody?.categoryBitMask = Constants.GROUND_BIT_MASK
+        ground!.physicsBody?.contactTestBitMask = Constants.JUMPER_BIT_MASK
+        ground!.physicsBody?.collisionBitMask = Constants.JUMPER_BIT_MASK
+        ground!.physicsBody?.dynamic = false
         
         // Upper Ground
-        ground2 = SKSpriteNode(texture: groundTextureUpper)
-        ground2.name = "ground"
-        ground2.setScale(0.85)
-        self.addChild(ground2)
-        ground2.position = CGPointMake(CGRectGetMidX(self.frame), self.frame.size.height + ground2.size.height/4)
-        ground2.physicsBody = SKPhysicsBody(rectangleOfSize: ground2.size)
-        ground2.physicsBody?.categoryBitMask = Constants.GROUND_BIT_MASK
-        ground2.physicsBody?.contactTestBitMask = Constants.JUMPER_BIT_MASK
-        ground2.physicsBody?.collisionBitMask = Constants.JUMPER_BIT_MASK
-        ground2.physicsBody?.dynamic = false
+        ground2 = SKScrollingNode.scrollingNode("groundRock.png", containerWidth: self.frame.size.width, containerHeight:self.frame.size.height) as SKScrollingNode;
+        ground2!.name = "ground"
+        ground2!.scrollingSpeed = GROUND_SCROLLING_SPEED;
+        ground2!.setScale(0.8)
+        self.addChild(self.ground2!)
+        ground2!.position = CGPointMake(0, self.frame.size.height - 25)
+        ground2!.physicsBody = SKPhysicsBody(rectangleOfSize: CGSize(width: 2000, height: 1))
+        ground2!.physicsBody?.categoryBitMask = Constants.GROUND_BIT_MASK
+        ground2!.physicsBody?.contactTestBitMask = Constants.JUMPER_BIT_MASK
+        ground2!.physicsBody?.collisionBitMask = Constants.JUMPER_BIT_MASK
+        ground2!.physicsBody?.dynamic = false
     }
     
     //Generating Meteorites
@@ -203,13 +248,13 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         {
             size_random = CGFloat(Float(arc4random()) / Float(UINT32_MAX))
         }
-        meteor.setScale(0.6 * size_random)
+        meteor.setScale(0.6 * size_random * scaling)
         
         // controlling meteor movements
         distanceToMove = CGFloat(self.frame.size.width + (1.0 * meteor.size.width))
         
         // randomize speed
-        moveObject = SKAction.moveByX(-distanceToMove, y:0.0, duration: NSTimeInterval(0.004 * size_random * distanceToMove))
+        moveObject = SKAction.moveByX(-distanceToMove, y:0.0, duration: NSTimeInterval(0.0032 * size_random * distanceToMove))
         removeObject = SKAction.removeFromParent()
         objectMoveAndRemove = SKAction.sequence([moveObject, removeObject])
         
@@ -224,6 +269,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         meteor.physicsBody?.dynamic = false
         var rotateMeteorite = SKAction.rotateByAngle(CGFloat(-M_PI/2.5 ), duration: 1.0)
         var rotateMeteoriteForever = SKAction.repeatActionForever(rotateMeteorite)
+        
         
         meteor.runAction(rotateMeteoriteForever)
         
@@ -309,16 +355,25 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         
         if powerupNum == 0
         {
-            powerUpFile = "power_green.png"
+            powerUpFile = "power_blue.png"
         }
         else if powerupNum == 1
         {
             powerUpFile = "power_red.png"
         }
+        else if powerupNum == 2
+        {
+            powerUpFile = "star_gold.png"
+        }
+        else if powerupNum == 3
+        {
+            powerUpFile = "red_bolt.png"
+        }
         
         var powerUpTexture = SKTexture(imageNamed: powerUpFile)
         
         let powerUp = SKSpriteNode(texture: powerUpTexture)
+        
         powerUp.setScale(0.65)
         // set bitmask
         powerUp.physicsBody?.categoryBitMask = Constants.POWERUP_BIT_MASK
@@ -326,11 +381,23 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         // set scale
         if powerupNum == 0
         {
-            powerUp.name = "green_powerup"
+            powerUp.name = "blue_powerup"
+            blue = powerUp
         }
         else if powerupNum == 1
         {
             powerUp.name = "red_powerup"
+            red = powerUp
+        }
+        else if powerupNum == 2
+        {
+            powerUp.name = "star_gold"
+            star = powerUp
+        }
+        else if powerupNum == 3
+        {
+            powerUp.name = "red_bolt"
+            bolt = powerUp
         }
         
         self.addChild(powerUp)
@@ -353,6 +420,9 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         // so it doesn't collide with other stuff
         powerUp.physicsBody?.dynamic = false
         
+        //println(powerUp)
+        //meteors.append(powerUp)
+
         // adjust movement parameters
         powerUp.runAction(objectMoveAndRemove)
     }
@@ -360,20 +430,35 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     func spawnPowerups()
     {
         var powerup_random = CGFloat(Float(arc4random()) / Float(UINT32_MAX))
-        var num = Int(powerup_random * 3)
+        var num = Int(powerup_random * 23)
         //println(num)
-        if num == 0
+        
+        if num == 0 && lastSpawn != 0
         {
+            lastSpawn = 0
             spawnColorPowerUp(0)
         }
-        else if num == 1
+        else if num == 5 && lastSpawn != 5
         {
+            lastSpawn = 5
             spawnColorPowerUp(1)
         }
-        else if num == 2
+        else if num == 10 && lastSpawn != 10
         {
+            lastSpawn = 10
+            spawnColorPowerUp(2)
+        }
+        else if num == 15 && lastSpawn != 15
+        {
+            lastSpawn = 15
+            spawnColorPowerUp(3)
+        }
+        else if num == 20 && lastSpawn != 20
+        {
+            lastSpawn = 20
             spawnUFO()
         }
+        //println("--\(lastSpawn)")
     }
     
     func spawnPremadeType1(){
@@ -390,16 +475,19 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     
     func didBeginContact(contact:SKPhysicsContact)
     {
-        println("A:\(contact.bodyA.node!.name!)   B:\(contact.bodyB.node!.name!)")
+        //println("A:\(contact.bodyA.node!.name!)   B:\(contact.bodyB.node!.name!)")
         if(
             ((contact.bodyB.node!.name! == "meteor" || contact.bodyB.node!.name! == "ufo" || contact.bodyB.node!.name! == "ground" ) && contact.bodyA.node!.name! == "jumper")
             ||
             ((contact.bodyA.node!.name! == "meteor" || contact.bodyA.node!.name! == "ufo" || contact.bodyA.node!.name! == "ground" ) && contact.bodyB.node!.name! == "jumper")
         )
         {
-            println("collision jumper")
+            //println("collision jumper")
+            
             if(!jumperDeath) {
                 jumperDeath = true;
+                self.runAction(SKAction.playSoundFileNamed("aaa.wav", waitForCompletion: false))
+                
                 inGame = false;
                 score.registerScore(currentScore);
                 instance.current_score = currentScore
@@ -411,31 +499,51 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         
         if ((contact.bodyA.node!.name! == "red_powerup" && contact.bodyB.node!.name! == "jumper")
             ||
-            (contact.bodyB.node!.name! == "red_powerup" && contact.bodyA.node!.name! == "jumper"))
+            (contact.bodyA.node!.name! == "jumper" && contact.bodyB.node!.name! == "red_powerup"))
         {
             // powered up; make alien smaller
-            poweredUp = true
+            //poweredUp = true
             jumper.texture = SKTexture(imageNamed: "Pink_Alien")
-            jumper.setScale(0.25)
+            jumper.setScale(0.225)
             jumper.physicsBody?.dynamic = true
-            powerUpTimer = 400
+            powerUpTimer = 200
+            red.removeFromParent()
         }
         
-        if ((contact.bodyA.node!.name! == "green_powerup" && contact.bodyB.node!.name! == "jumper")
+        if ((contact.bodyA.node!.name! == "blue_powerup" && contact.bodyB.node!.name! == "jumper")
             ||
-            (contact.bodyA.node!.name! == "green_powerup" && contact.bodyB.node!.name! == "jumper"))
+            (contact.bodyA.node!.name! == "jumper" && contact.bodyB.node!.name! == "blue_powerup"))
         {
             // powered up; make alien bigger
-            poweredUp = true
+            //poweredUp = true
             jumper.texture = SKTexture(imageNamed: "Blue_Alien")
-            jumper.setScale(0.5)
+            jumper.setScale(0.35)
             jumper.physicsBody?.dynamic = true
-            powerUpTimer = 400
+            powerUpTimer = 200
+            blue.removeFromParent()
+        }
+        
+        if ((contact.bodyA.node!.name! == "star_gold" && contact.bodyB.node!.name! == "jumper")
+            ||
+            (contact.bodyA.node!.name! == "jumper" && contact.bodyB.node!.name! == "star_gold"))
+        {
+            currentScore += 300
+            star.removeFromParent()
+        }
+        
+        if ((contact.bodyA.node!.name! == "red_bolt" && contact.bodyB.node!.name! == "jumper")
+            ||
+            (contact.bodyA.node!.name! == "jumper" && contact.bodyB.node!.name! == "red_bolt"))
+        {
+            scaling = 0.5
+            boltTime = 200
+            bolt.removeFromParent()
         }
     }
     
     override func touchesBegan(touches: NSSet, withEvent event: UIEvent) {
         if(jumperDeath) {
+            
             startGame();
             gameStarted = false
         } else {
@@ -453,23 +561,28 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     }
     
     override func update(currentTime: CFTimeInterval) {
+        //println(scaling)
         /* Called before each frame is rendered */
         // spawn meteors every 5 frames
-        
+        //println(meteors)
         if (inGame && gameStarted){
             updateScore()
         }
         
         if(!jumperDeath && gameStarted) {
             back1!.update(currentTime);
+            ground!.update(currentTime);
+            ground2!.update(currentTime);
             jumper!.update(currentTime);
 
             if current_time == 0.0{
                 current_time = currentTime
             }
             diff_sec = Int((currentTime - current_time)/1.5)
+            
+            println(diff_sec)
         
-            println("limit: \(limit)  count: \(count)")
+            //println("limit: \(limit)  count: \(count)")
             count++
             if (count == limit || count > limit){
                 spawnMeteorites()
@@ -477,15 +590,26 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
                 count = 0
             }
             //println(powerUpTimer)
-            if (powerUpTimer > 0){
+            
+            if (boltTime > 0)
+            {
+                boltTime--
+            }
+            else
+            {
+                scaling = 1.0
+            }
+            
+            if (powerUpTimer > 0)
+            {
                 powerUpTimer--
             }
-        
-            if (powerUpTimer <= 0){
+            else
+            {
                 poweredUp = false
-                jumper.texture = SKTexture(imageNamed: "Alien")
-                jumper.physicsBody?.dynamic = true
-                //    jumper.setScale(0.4)
+                //jumper.texture = SKTexture(imageNamed: "Alien")
+                //jumper.physicsBody?.dynamic = true
+                jumper.setScale(0.275)
             }
         
             jumper.position.x = self.frame.size.width * 0.15
@@ -493,47 +617,47 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
             //Change number of spawn meteorites base on time
             if diff_sec < 5
             {
-                limit = 50
+                limit = 24
             }
             else if diff_sec < 10
             {
-                limit = 45
+                limit = 22
             }
             else if diff_sec < 15
             {
-                limit = 40
+                limit = 20
             }
             else if diff_sec < 20
             {
-                limit = 30
+                limit = 18
             }
             else if diff_sec < 25
             {
-                limit = 35
+                limit = 16
             }
             else if diff_sec < 30
             {
-                limit = 30
+                limit = 14
             }
             else if diff_sec < 35
             {
-                limit = 25
+                limit = 12
             }
             else if diff_sec < 40
             {
-                limit = 20
+                limit = 10
             }
             else if diff_sec < 45
             {
-                limit = 15
+                limit = 8
             }
             else if diff_sec < 50
             {
-                limit = 10
+                limit = 6
             }
             else
             {
-                limit = 8
+                limit = 4
             }
         }
     }
